@@ -1,0 +1,21 @@
+OPERATIONS STANDARD OPERATING PROCEDURES (SAMPLE / SYNTHETIC DOCUMENT)
+
+1. Hull Section Quality Check
+- Upon completion of a hull section weld, the assigned Quality Assurance (QA) inspector performs a visual weld inspection followed by a non-destructive test (NDT): either ultrasonic testing (UT) or radiographic testing (RT), per the applicable weld class.
+- Discrepancies are logged as a Nonconformance Report (NCR) in SMAX and routed to the Engineering Liaison for disposition.
+- A section may not move to the next production stage ("erection") until all open NCRs on it are closed or dispositioned "use as is."
+
+2. Material Staging and Scheduling
+- Steel and outfitting material must be staged at the work area no later than 24 hours before the scheduled start of the task, per the master production schedule.
+- Schedule conflicts or material shortages should be reported by opening an Operations ticket in SMAX with priority "high" and tagging the Production Control team.
+
+3. Shift Handoff
+- Each shift lead documents open work, safety concerns, and equipment status in the shift log before handoff.
+- Critical path delays must be communicated to the next shift lead directly (in person or via Jabber) in addition to the written log.
+
+4. Equipment Downtime
+- Equipment failures affecting the production schedule are reported immediately via SMAX ticket, category "equipment," priority based on schedule impact.
+- Maintenance provides an estimated time to repair (ETR) within 2 hours of ticket creation.
+
+5. Change Requests
+- Any deviation from the approved build plan requires a Engineering Change Request (ECR), reviewed by Engineering and Quality before implementation.

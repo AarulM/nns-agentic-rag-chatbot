@@ -1,0 +1,25 @@
+SHIPYARD SAFETY PROCEDURES (SAMPLE / SYNTHETIC DOCUMENT)
+
+1. Personal Protective Equipment (PPE) Requirements
+- Hard hats and safety glasses are required in all active production areas.
+- Welding bay: welding helmet with correct shade lens, flame-resistant jacket, welding gloves, and steel-toe boots are mandatory. No synthetic fabrics allowed near open flame or arc welding.
+- Confined space entry (double-bottom tanks, void spaces): requires a Confined Space Entry Permit, atmospheric gas testing, and a dedicated attendant stationed at the entry point at all times.
+- Fall protection (harness + lanyard) is required for any work above 6 feet where guardrails are not present.
+
+2. Incident Reporting
+- Any injury, near-miss, or equipment damage must be reported to a supervisor immediately, regardless of severity.
+- Supervisors must log the incident in SMAX within 1 hour of notification.
+- Serious injuries (lost-time, hospitalization) require immediate notification to the Safety Office at safety-emergency@example.com and a phone call to the on-call Safety Manager.
+
+3. Lockout/Tagout (LOTO)
+- Before servicing any machinery, energy sources must be isolated and locked out using an individual lock and tag.
+- Only trained and authorized employees may perform LOTO procedures.
+- Group lockout procedures apply when multiple crafts are working on the same equipment.
+
+4. Housekeeping
+- Walkways and emergency exits must remain clear at all times.
+- Compressed gas cylinders must be stored upright, secured, and separated (oxygen from fuel gases) per NFPA guidelines.
+
+5. Emergency Procedures
+- In case of fire, activate the nearest pull station, evacuate via the marked route, and muster at your assigned muster point.
+- Do not use elevators during a fire alarm.
