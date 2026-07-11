@@ -57,4 +57,4 @@ operations_agent = Agent(
 )
 
 if __name__ == "__main__":
-    print(operations_agent("What's the SOP for a hull section quality check?"))
+    print(operations_agent("What's on my calendar for 2026-07-14?"))

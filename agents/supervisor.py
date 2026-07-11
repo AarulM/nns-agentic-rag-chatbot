@@ -7,7 +7,6 @@ Deploy later: wrap `handle_request` with the AgentCore Runtime entrypoint
 decorator per the samples in Build_Plan.md, then `agentcore launch`.
 """
 from strands import Agent, tool
-from model_config import get_model
 from hr_agent import hr_agent
 from safety_agent import safety_agent
 from operations_agent import operations_agent
@@ -33,7 +32,6 @@ def ask_operations(question: str) -> str:
 
 supervisor = Agent(
     name="supervisor",
-    model=get_model(),
     system_prompt=(
         "You are the front-door assistant for a shipbuilding company's internal "
         "chatbot, used by employees, new hires, and interns. Decide which "
@@ -53,4 +51,4 @@ def handle_request(user_message: str) -> str:
 
 
 if __name__ == "__main__":
-    print(handle_request("I'm a new intern starting Monday — what do I need to know?"))
+    print(handle_request("What PPE do I need for the welding bay, and what's on my first-week onboarding checklist?"))
