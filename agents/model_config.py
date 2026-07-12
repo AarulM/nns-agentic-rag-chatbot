@@ -19,6 +19,17 @@ def get_model():
         return OllamaModel(
             host="http://localhost:11434",
             model_id=os.environ.get("OLLAMA_MODEL_ID", "llama3.1:8b"),
+            # An 8B model at Ollama's default temperature (0.8) is a coin
+            # flip on tool routing and synthesis — some runs it answers
+            # perfectly, others it rambles about "question format". Near-zero
+            # temperature makes it behave the same way every run.
+            temperature=0.1,
+            # Ollama's default context window is tiny (2048 tokens). Once a
+            # chat plus tool definitions outgrows it, Ollama silently drops
+            # the OLDEST tokens — the system prompt — and the agent visibly
+            # derails mid-conversation. 8192 fits comfortably in RAM for an
+            # 8B model.
+            options={"num_ctx": 8192},
         )
 
     if provider == "bedrock":

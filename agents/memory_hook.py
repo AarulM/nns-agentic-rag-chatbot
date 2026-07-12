@@ -55,7 +55,9 @@ class ShortTermMemoryHookProvider(HookProvider):
         # dialogue transcript embedded in their instructions and start
         # parroting it back regardless of the current question — that's
         # what caused the "USER: ... ASSISTANT: ..." echoing bug.
-        for turn in recent_turns:
+        # get_last_k_turns returns newest-first; seed oldest-first so the
+        # model sees the conversation in the order it actually happened.
+        for turn in reversed(recent_turns):
             for message in turn:
                 role = message["role"].lower()
                 if role not in ("user", "assistant"):

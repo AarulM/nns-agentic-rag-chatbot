@@ -8,6 +8,7 @@ decorator per the samples in Build_Plan.md, then `agentcore launch`.
 """
 import json
 import re
+import uuid
 from strands import Agent, tool
 from model_config import get_model
 from guardrail import apply_guardrail
@@ -18,11 +19,15 @@ from aws_config import MEMORY_ID
 from memory_hook import ShortTermMemoryHookProvider, memory_client
 from trace_log import tracing_callback_handler, drain_queue, trace_queue
 
-# Static for now since this is a single-user local test. In a real
-# deployment, actor_id/session_id would be set per logged-in employee and
-# per conversation instead of hardcoded.
+# Static actor for this single-user local test; in a real deployment it
+# would be the logged-in employee. The session ID is fresh on every app
+# start ON PURPOSE: when every run shared one hardcoded session, each
+# startup seeded 5 turns of stale history from ALL previous test chats
+# into the model's context, and the small local model would answer those
+# old topics instead of the current question. Memory still records and
+# recalls everything within the running session.
 ACTOR_ID = "local_test_user"
-SESSION_ID = "local_test_session_2"
+SESSION_ID = f"local_test_{uuid.uuid4().hex[:8]}"
 
 
 @tool
@@ -154,7 +159,7 @@ def handle_request(user_message: str) -> str:
 
 
 if __name__ == "__main__":
-    print("NNS Assistant — type 'quit' to exit. Memory persists even if you quit and restart.\n")
+    print("NNS Assistant — type 'quit' to exit.\n")
     while True:
         user_input = input("You: ").strip()
         if user_input.lower() in ("quit", "exit"):
