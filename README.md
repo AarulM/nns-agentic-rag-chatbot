@@ -1,6 +1,6 @@
 # NNS Assistant — Agentic RAG Chatbot
 
-A multi-agent internal chatbot for a (fictional) shipbuilding company, built to
+A multi-agent internal chatbot for a shipbuilding company, built to
 learn AWS Bedrock AgentCore + the Strands Agents SDK. A supervisor agent routes
 employee questions to three specialists — HR, Safety, and Operations — which
 answer via RAG over a Bedrock Knowledge Base and take real actions (tickets,
