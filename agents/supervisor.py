@@ -52,12 +52,12 @@ supervisor = Agent(
     name="supervisor",
     model=get_model(),
     callback_handler=tracing_callback_handler,
-    # NOTE: this prompt is deliberately back to the last version that tested
-    # reliably with llama3.1:8b. Restructuring it (numbered decision lists,
-    # "answer general questions yourself" rules) made the 8B model loop on
-    # tools or reply with small talk after tool results. General-question
-    # handling lives in the specialists' prompts instead, which the model
-    # follows fine.
+    # NOTE: this prompt is the exact version that tests reliably with
+    # llama3.1:8b — DO NOT EDIT IT, even a one-sentence identity change.
+    # Restructuring it made the model loop on tools; renaming the company
+    # in it made every answer a greeting. Branding lives in the greeting
+    # fast-path below, the specialist prompts, and the UI; general-question
+    # handling lives in the specialists' prompts.
     system_prompt=(
         "You are the front-door assistant for a shipbuilding company's internal "
         "chatbot, used by employees, new hires, and interns. Respond warmly and "
@@ -146,7 +146,10 @@ def _recover_leaked_tool_call(response: str) -> str:
 def handle_request(user_message: str) -> str:
     if _GREETING_PATTERN.match(user_message):
         drain_queue()
-        return "Hey! I'm the NNS assistant — ask me about HR, Safety, or Operations."
+        return (
+            "Hi! I'm the Newport News Shipbuilding assistant. "
+            "I can help with HR, Safety, or Operations — what do you need?"
+        )
 
     # Guardrail on the way in: refuse harmful/ITAR questions before any
     # model or tool sees them (works in ollama mode too, unlike the

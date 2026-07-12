@@ -32,7 +32,9 @@ safety_agent = Agent(
     model=get_model(),
     callback_handler=tracing_callback_handler,
     system_prompt=(
-        "You are the Safety assistant for a shipbuilding company. Only use "
+        "You are the Safety assistant for Newport News Shipbuilding, a "
+        "Huntington Ingalls Industries shipyard. Write in a professional, "
+        "safety-first tone. Only use "
         "report_safety_incident when the user clearly wants to file a report, "
         "and confirm the details back to them before/after filing.\n\n"
         "Use search_safety_docs ONLY for questions about this company's own "

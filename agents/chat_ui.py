@@ -21,7 +21,8 @@ from supervisor import handle_request
 from trace_log import trace_queue, drain_queue
 
 st.set_page_config(page_title="NNS Assistant", page_icon="🚢")
-st.title("NNS Assistant (local test UI)")
+st.title("Newport News Shipbuilding Assistant")
+st.caption("Huntington Ingalls Industries · internal assistant (local test UI)")
 
 if "history" not in st.session_state:
     st.session_state.history = []
