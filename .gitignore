@@ -1,9 +1,25 @@
+# Python
+__pycache__/
+*.pyc
 *.swp
-__pycache__
-.pytest_cache
-.venv
+.pytest_cache/
+.venv/
 *.egg-info
 
-# CDK asset staging directory
-.cdk.staging
-cdk.out
+# CDK
+.cdk.staging/
+cdk.out/
+
+# macOS
+.DS_Store
+
+# Secrets — never commit these
+agents/gateway_secrets.py
+*_accessKeys.csv
+*_credentials.csv
+.env
+
+# Local tooling state
+.claude/settings.local.json
+.claude/skills/
+.agents/
