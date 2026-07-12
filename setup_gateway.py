@@ -21,8 +21,8 @@ import requests
 REGION = "us-east-1"
 
 # From your `cdk deploy` outputs — paste your own values here.
-LAMBDA_ARN = "arn:aws:lambda:us-east-1:465733921455:function:NnsAgenticRagChatbotStack-McpToolsFunctionBED47FDB-fxeMHwrrxE5H"
-GATEWAY_ROLE_ARN = "arn:aws:iam::465733921455:role/NnsAgenticRagChatbotStack-GatewayExecutionRole16B5E-rLLWKHPpumv0"
+LAMBDA_ARN = "arn:aws:lambda:us-east-1:465733921455:function:NnsAgenticRagChatbotStack-McpToolsFunctionBED47FDB-rL70B1jiBYTe"
+GATEWAY_ROLE_ARN = "arn:aws:iam::465733921455:role/NnsAgenticRagChatbotStack-GatewayExecutionRole16B5E-QlH9b8y26a7C"
 
 USER_POOL_NAME = "nns-agentcore-gateway-pool"
 RESOURCE_SERVER_ID = "nns-agentcore-gateway-id"

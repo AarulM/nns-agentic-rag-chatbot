@@ -6,10 +6,12 @@ import boto3
 from strands import Agent, tool
 from mcp_gateway_client import create_smax_ticket
 from model_config import get_model
+from trace_log import tracing_callback_handler
 
-bedrock_agent_runtime = boto3.client("bedrock-agent-runtime", region_name="us-east-1")
+bedrock_agent_runtime = boto3.client("bedrock-agent-runtime")
 
-SAFETY_KNOWLEDGE_BASE_ID = "OSOGWWRI0X"
+# TODO: replace with your Safety Knowledge Base ID
+SAFETY_KNOWLEDGE_BASE_ID = "RW01IL1SNT" 
 
 
 @tool
@@ -39,11 +41,17 @@ def report_safety_incident(description: str, location: str) -> str:
 safety_agent = Agent(
     name="safety_agent",
     model=get_model(),
+    callback_handler=tracing_callback_handler,
     system_prompt=(
         "You are the Safety assistant for a shipbuilding company. Use "
         "search_safety_docs for procedure questions. Only use "
         "report_safety_incident when the user clearly wants to file a report, "
-        "and confirm the details back to them before/after filing."
+        "and confirm the details back to them before/after filing.\n\n"
+        "After search_safety_docs returns results, check whether they actually "
+        "answer the specific question asked before using them. If the results "
+        "are about a different topic, say plainly that you couldn't find "
+        "documentation on that specific question rather than presenting "
+        "unrelated content as the answer."
     ),
     tools=[search_safety_docs, report_safety_incident],
 )

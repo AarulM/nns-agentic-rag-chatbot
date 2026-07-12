@@ -6,10 +6,12 @@ and operations_agent.py, just swap the KB id, prompt, and tools.
 import boto3
 from strands import Agent, tool
 from model_config import get_model
+from trace_log import tracing_callback_handler
 
-bedrock_agent_runtime = boto3.client("bedrock-agent-runtime", region_name="us-east-1")
+bedrock_agent_runtime = boto3.client("bedrock-agent-runtime")
 
-HR_KNOWLEDGE_BASE_ID = "OSOGWWRI0X"
+# TODO: replace with your HR Knowledge Base ID (from the Bedrock console)
+HR_KNOWLEDGE_BASE_ID = "RW01IL1SNT"
 
 
 @tool
@@ -27,11 +29,17 @@ def search_hr_docs(query: str) -> str:
 hr_agent = Agent(
     name="hr_agent",
     model=get_model(),
+    callback_handler=tracing_callback_handler,
     system_prompt=(
         "You are the HR assistant for a shipbuilding company. Answer questions "
         "about onboarding, benefits, PTO, and company HR policy using the "
         "search_hr_docs tool. If the answer isn't in company documents, say so "
-        "plainly instead of guessing. Never share another employee's personal data."
+        "plainly instead of guessing. Never share another employee's personal data.\n\n"
+        "After search_hr_docs returns results, check whether they actually "
+        "answer the specific question asked before using them. If the results "
+        "are about a different topic, say plainly that you couldn't find "
+        "documentation on that specific question rather than presenting "
+        "unrelated content as the answer."
     ),
     tools=[search_hr_docs],
 )

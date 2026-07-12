@@ -14,12 +14,12 @@ import boto3
 REGION = "us-east-1"
 
 # Known from your last run's output — already exist, don't recreate.
-USER_POOL_ID = "us-east-1_XT0mekK2i"
-COGNITO_DOMAIN = "nns-agentcore-xt0mekk2i"
-GATEWAY_ID = "nnscompanytoolsgateway-qcngunnqhe"
-GATEWAY_URL = "https://nnscompanytoolsgateway-qcngunnqhe.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp"
+USER_POOL_ID = "us-east-1_dcNwgvSya"
+COGNITO_DOMAIN = "nns-agentcore-dcnwgvsya"
+GATEWAY_ID = "nnscompanytoolsgateway-omj3vt66ow"
+GATEWAY_URL = "https://nnscompanytoolsgateway-omj3vt66ow.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp"
 
-LAMBDA_ARN = "arn:aws:lambda:us-east-1:465733921455:function:NnsAgenticRagChatbotStack-McpToolsFunctionBED47FDB-fxeMHwrrxE5H"
+LAMBDA_ARN = "arn:aws:lambda:us-east-1:465733921455:function:NnsAgenticRagChatbotStack-McpToolsFunctionBED47FDB-rL70B1jiBYTe"
 CLIENT_NAME = "nns-agentcore-gateway-client"
 
 cognito = boto3.client("cognito-idp", region_name=REGION)

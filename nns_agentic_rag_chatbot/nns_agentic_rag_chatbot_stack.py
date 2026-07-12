@@ -3,6 +3,7 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_lambda as lambda_,
     aws_iam as iam,
+    aws_bedrock as cfn_bedrock,
     RemovalPolicy,
     CfnOutput,
     Duration,
@@ -70,3 +71,59 @@ class NnsAgenticRagChatbotStack(Stack):
 
         CfnOutput(self, "McpToolsLambdaArn", value=mcp_tools_lambda.function_arn)
         CfnOutput(self, "GatewayExecutionRoleArn", value=gateway_execution_role.role_arn)
+
+        # ---------- NEW: Bedrock Guardrail (content filtering + PII redaction) ----------
+        # Bedrock-native safety layer. Only applies when an agent calls Bedrock
+        # (MODEL_PROVIDER=bedrock) — Ollama never touches this. Free to create;
+        # tiny per-request cost only when it actually evaluates a real Bedrock call.
+        guardrail = cfn_bedrock.CfnGuardrail(
+            self, "CompanyGuardrail",
+            name="nns-chatbot-guardrail",
+            description="Safety guardrail for the NNS assistant: blocks harmful content, redacts PII, and blocks export-controlled/technical-data requests.",
+            blocked_input_messaging="Sorry, I can't help with that request.",
+            blocked_outputs_messaging="Sorry, I can't provide that response.",
+            content_policy_config=cfn_bedrock.CfnGuardrail.ContentPolicyConfigProperty(
+                filters_config=[
+                    cfn_bedrock.CfnGuardrail.ContentFilterConfigProperty(
+                        type=filter_type,
+                        input_strength="HIGH",
+                        # PROMPT_ATTACK is input-only — Bedrock requires its
+                        # output strength to be NONE.
+                        output_strength="NONE" if filter_type == "PROMPT_ATTACK" else "HIGH",
+                    )
+                    for filter_type in ("HATE", "INSULTS", "SEXUAL", "VIOLENCE", "MISCONDUCT", "PROMPT_ATTACK")
+                ]
+            ),
+            sensitive_information_policy_config=cfn_bedrock.CfnGuardrail.SensitiveInformationPolicyConfigProperty(
+                pii_entities_config=[
+                    cfn_bedrock.CfnGuardrail.PiiEntityConfigProperty(type=pii_type, action="ANONYMIZE")
+                    for pii_type in ("EMAIL", "PHONE", "NAME", "US_SOCIAL_SECURITY_NUMBER")
+                ]
+            ),
+            topic_policy_config=cfn_bedrock.CfnGuardrail.TopicPolicyConfigProperty(
+                topics_config=[
+                    cfn_bedrock.CfnGuardrail.TopicConfigProperty(
+                        name="ExportControlledTechnicalData",
+                        definition=(
+                            "Requests for technical specifications, drawings, or data about "
+                            "ship designs, weapons systems, or defense articles that would be "
+                            "considered export-controlled (ITAR/CUI) information."
+                        ),
+                        examples=[
+                            "What are the hull design specifications for the submarine?",
+                            "Can you give me the technical drawings for the weapons system?",
+                        ],
+                        type="DENY",
+                    )
+                ]
+            ),
+        )
+
+        guardrail_version = cfn_bedrock.CfnGuardrailVersion(
+            self, "CompanyGuardrailVersion",
+            guardrail_identifier=guardrail.attr_guardrail_id,
+            description="Initial published version",
+        )
+
+        CfnOutput(self, "GuardrailId", value=guardrail.attr_guardrail_id)
+        CfnOutput(self, "GuardrailVersion", value=guardrail_version.attr_version)

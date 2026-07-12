@@ -23,12 +23,22 @@ def get_model():
 
     if provider == "bedrock":
         from strands.models import BedrockModel
-        return BedrockModel(
+        kwargs = dict(
             model_id=os.environ.get(
                 "BEDROCK_MODEL_ID",
-                "anthropic.claude-3-5-sonnet-20241022-v2:0",
+                "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
             ),
             region_name=os.environ.get("AWS_REGION", "us-east-1"),
         )
+        # Guardrail is optional — only applied if these env vars are set
+        # (values come from the GuardrailId/GuardrailVersion CDK outputs).
+        # Ollama never sees this; Guardrails are a Bedrock-only feature.
+        guardrail_id = os.environ.get("GUARDRAIL_ID")
+        guardrail_version = os.environ.get("GUARDRAIL_VERSION")
+        if guardrail_id and guardrail_version:
+            kwargs["guardrail_id"] = guardrail_id
+            kwargs["guardrail_version"] = guardrail_version
+            kwargs["guardrail_trace"] = "enabled"
+        return BedrockModel(**kwargs)
 
     raise ValueError(f"Unknown MODEL_PROVIDER: {provider!r}. Use 'ollama' or 'bedrock'.")

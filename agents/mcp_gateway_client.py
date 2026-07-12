@@ -6,11 +6,12 @@ so safety_agent.py and operations_agent.py don't need to change at all —
 only what happens inside these functions changed, from an in-memory fake
 to a real call through the Gateway to our mock Lambda.
 
-NOTE on the hardcoded secret below: fine for a personal learning repo,
-but before this touches real company data/systems, move
-COGNITO_CLIENT_SECRET to an environment variable instead of committing it
-to source control.
+The Cognito client secret is the one real credential here, so it lives
+outside source control: either export COGNITO_CLIENT_SECRET, or put it in
+the gitignored agents/gateway_secrets.py (value comes from
+setup_gateway.py's final printed output).
 """
+import os
 import time
 import uuid
 import requests
@@ -18,11 +19,21 @@ from strands.tools.mcp.mcp_client import MCPClient
 from mcp.client.streamable_http import streamablehttp_client
 
 # From setup_gateway.py's final printed output.
-GATEWAY_URL = "https://nnscompanytoolsgateway-qcngunnqhe.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp"
-COGNITO_DOMAIN = "nns-agentcore-xt0mekk2i"
-COGNITO_CLIENT_ID = "3vn7b8scfomfss6ub7hh15mkr9"
-COGNITO_CLIENT_SECRET = "fgr5hvra948i8bmtgrrts3h8qtvnucqc8rcu7ushcankeb05em3"
+GATEWAY_URL = "https://nnscompanytoolsgateway-omj3vt66ow.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp"
+COGNITO_DOMAIN = "nns-agentcore-dcnwgvsya"
+COGNITO_CLIENT_ID = "23ddablie1urm7mov53i1ltdba"
 REGION = "us-east-1"
+
+COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET")
+if not COGNITO_CLIENT_SECRET:
+    try:
+        from gateway_secrets import COGNITO_CLIENT_SECRET
+    except ImportError:
+        raise RuntimeError(
+            "No Cognito client secret found. Export COGNITO_CLIENT_SECRET or "
+            "create agents/gateway_secrets.py with the value printed by "
+            "setup_gateway.py."
+        )
 SCOPE_STRING = "nns-agentcore-gateway-id/gateway:read nns-agentcore-gateway-id/gateway:write"
 
 _cached_token = None
