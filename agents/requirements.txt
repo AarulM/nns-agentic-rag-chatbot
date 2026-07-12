@@ -2,3 +2,5 @@ strands-agents[ollama]
 strands-agents-tools
 bedrock-agentcore
 boto3
+requests
+streamlit

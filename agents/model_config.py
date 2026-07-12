@@ -36,9 +36,12 @@ def get_model():
     if provider == "bedrock":
         from strands.models import BedrockModel
         kwargs = dict(
+            # Claude Haiku 4.5 (cheapest Claude tier) via the global
+            # inference profile. Export BEDROCK_MODEL_ID to use a bigger
+            # model, e.g. global.anthropic.claude-sonnet-4-5-20250929-v1:0.
             model_id=os.environ.get(
                 "BEDROCK_MODEL_ID",
-                "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "global.anthropic.claude-haiku-4-5-20251001-v1:0",
             ),
             region_name=os.environ.get("AWS_REGION", "us-east-1"),
         )
