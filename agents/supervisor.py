@@ -6,14 +6,16 @@ Run locally:  python supervisor.py
 Deploy later: wrap `handle_request` with the AgentCore Runtime entrypoint
 decorator per the samples in Build_Plan.md, then `agentcore launch`.
 """
+import json
 import re
 from strands import Agent, tool
 from model_config import get_model
+from guardrail import apply_guardrail
 from hr_agent import hr_agent
 from safety_agent import safety_agent
 from operations_agent import operations_agent
 from memory_hook import ShortTermMemoryHookProvider, memory_client, MEMORY_ID
-from trace_log import tracing_callback_handler, drain_queue
+from trace_log import tracing_callback_handler, drain_queue, trace_queue
 
 # Static for now since this is a single-user local test. In a real
 # deployment, actor_id/session_id would be set per logged-in employee and
@@ -90,11 +92,64 @@ _GREETING_PATTERN = re.compile(
 )
 
 
+# --- Leaked tool-call recovery -------------------------------------------
+# llama3.1:8b sometimes emits the routing tool call as literal JSON text
+# ('{"name": "ask_operations", "parameters": {...}}') instead of a native
+# tool call, so Strands never executes it and the raw JSON becomes the
+# "answer". When the reply is exactly that shape, parse it and invoke the
+# specialist ourselves so the user still gets a real answer.
+_LEAKED_TOOL_CALL_PATTERN = re.compile(
+    r'\{\s*"name"\s*:\s*"(ask_hr|ask_safety|ask_operations)"\s*,\s*'
+    r'"parameters"\s*:\s*(\{.*\})\s*\}',
+    re.DOTALL,
+)
+
+_SPECIALISTS = {
+    "ask_hr": hr_agent,
+    "ask_safety": safety_agent,
+    "ask_operations": operations_agent,
+}
+
+
+def _recover_leaked_tool_call(response: str) -> str:
+    match = _LEAKED_TOOL_CALL_PATTERN.search(response)
+    if not match:
+        return response
+    tool_name, raw_params = match.groups()
+    try:
+        params = json.loads(raw_params)
+    except json.JSONDecodeError:
+        try:
+            # The model often emits \' inside strings, which JSON forbids.
+            params = json.loads(raw_params.replace("\\'", "'"))
+        except json.JSONDecodeError:
+            return response
+    question = params.get("question")
+    if not isinstance(question, str) or not question:
+        return response
+    trace_queue.put(f"Recovered leaked tool call → `{tool_name}`")
+    return str(_SPECIALISTS[tool_name](question))
+
+
 def handle_request(user_message: str) -> str:
     if _GREETING_PATTERN.match(user_message):
         drain_queue()
         return "Hey! I'm the NNS assistant — ask me about HR, Safety, or Operations."
-    return str(supervisor(user_message))
+
+    # Guardrail on the way in: refuse harmful/ITAR questions before any
+    # model or tool sees them (works in ollama mode too, unlike the
+    # guardrail attached to BedrockModel).
+    blocked, message = apply_guardrail(user_message, "INPUT")
+    if blocked:
+        drain_queue()
+        return message
+
+    response = _recover_leaked_tool_call(str(supervisor(user_message)))
+
+    # Guardrail on the way out: blocks disallowed responses and anonymizes
+    # PII (names/emails/phones/SSNs become {NAME}, {EMAIL}, ...).
+    _, response = apply_guardrail(response, "OUTPUT")
+    return response
 
 
 if __name__ == "__main__":

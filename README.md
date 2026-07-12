@@ -19,8 +19,8 @@ supervisor ──agents-as-tools──► hr_agent ─────► Bedrock Kn
    │     (short-term history)            ▼
    │                            AgentCore Gateway (MCP, Cognito M2M auth, WAF)
    └── Bedrock Guardrail                 │
-       (bedrock mode only)               ▼
-                                mock Lambda (SMAX tickets / calendar / Jabber)
+       (ApplyGuardrail on every          ▼
+        input & output)         mock Lambda (SMAX tickets / calendar / Jabber)
 ```
 
 - **CDK stack** (`nns_agentic_rag_chatbot/`): S3 docs bucket, Knowledge Base +
@@ -38,10 +38,16 @@ Every agent picks its model from `MODEL_PROVIDER` (see `agents/model_config.py`)
 # default — free, local; needs `ollama serve` with llama3.1:8b pulled
 export MODEL_PROVIDER=ollama
 
-# real Claude on Bedrock (costs money); Guardrail applies only in this mode
+# real Claude on Bedrock (costs money)
 export MODEL_PROVIDER=bedrock
-export GUARDRAIL_ID=... GUARDRAIL_VERSION=...   # from CDK outputs, optional
+export GUARDRAIL_ID=... GUARDRAIL_VERSION=...   # from CDK outputs; defaults in agents/guardrail.py
 ```
+
+The Guardrail is enforced in **both** modes: `handle_request` runs every user
+message and final reply through the standalone `ApplyGuardrail` API
+(`agents/guardrail.py`) — blocking harmful/ITAR content and anonymizing PII —
+so switching to Ollama doesn't switch off safety. In bedrock mode the model
+invocation additionally applies it natively.
 
 Note: the Knowledge Base retrieval and Gateway tool calls always hit real AWS
 (small cost — the KB's OpenSearch backing is the expensive part), only the
