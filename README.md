@@ -7,6 +7,16 @@ shipbuilding-style company. It uses **AWS Bedrock AgentCore**, the **Strands Age
 > **This is a learning project built entirely on synthetic sample documents.** No real or
 > proprietary data is used. The "ITAR/CUI" theme is intentional practice flavor only.
 
+## Demo
+
+The assistant answering a general question, then walking a new welder through
+onboarding — routing to the right specialist agent and answering from the
+company knowledge base:
+
+![Demo — PPE question answered from company docs](docs/demo-chat-1.png)
+
+![Demo — welder onboarding roadmap from the HR docs](docs/demo-chat-2.png)
+
 ---
 
 ## Table of contents
