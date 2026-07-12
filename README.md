@@ -82,6 +82,30 @@ Guardrail checks the answer (blocks disallowed output, masks emails/phones/SSNs)
 AgentCore Memory records every turn; within one app run the assistant remembers the
 conversation. Each app restart starts a fresh memory session on purpose (see troubleshooting).
 
+### The AWS services used, and what each one does here
+
+| Service | What it is | How this project uses it | Created by |
+|---|---|---|---|
+| **Amazon S3** | Object storage | Holds the company documents (`sample_docs/*.txt`) — the raw material the RAG system knows. You upload docs here; the Knowledge Base reads them from here. | CDK stack |
+| **Amazon Bedrock Knowledge Base** | Managed RAG service | The retrieval half of RAG. On ingestion it splits each S3 doc into chunks, turns each chunk into a vector with **Titan Text Embeddings V2**, and stores them. At question time, the specialist agents call its `Retrieve` API (`agents/knowledge_base.py`) and get back the 5 most relevant passages. | CDK stack |
+| **Amazon OpenSearch Serverless** | Vector database | The index that actually stores and searches the embeddings for the Knowledge Base. Invisible to the code but **it's the ~$1/hr cost driver** — it bills for existing, not for being used. | CDK stack (created for the KB) |
+| **Amazon Bedrock Guardrails** | Managed content-safety layer | Every user message and every final answer passes through the `ApplyGuardrail` API (`agents/guardrail.py`): harmful-content filters, a custom ITAR/export-control topic that refuses submarine-drawings-style asks, and PII masking (emails/phones/SSNs become `{EMAIL}` etc.). Works in Ollama mode too, because the app calls it directly. | CDK stack |
+| **Bedrock AgentCore Gateway** | Managed MCP tool server | Exposes the company "action" tools (create ticket, check calendar, send Jabber) to any agent over the **MCP protocol**. The agents connect over HTTPS with a bearer token (`agents/mcp_gateway_client.py`); the Gateway validates the token, then invokes the Lambda that implements the tool. Swap the Lambda for real SMAX/calendar/Jabber integrations later and no agent code changes. | `setup_gateway.py` (CDK support is still immature) |
+| **Amazon Cognito** | Identity / OAuth service | Machine-to-machine auth for the Gateway. A Cognito "user pool" holds an app client (ID + secret); the agent exchanges those for a short-lived JWT access token (`client_credentials` flow), and the Gateway only accepts requests carrying a valid token. This is why `gateway_secrets.py` exists. | `setup_gateway.py` |
+| **AWS WAF** | Web application firewall | Sits in front of the Gateway's public URL: two AWS managed rule sets (common exploits, known bad inputs) plus a 2000-requests-per-5-min-per-IP rate limit. Optional hardening — Cognito already gates access. | `setup_waf.py` |
+| **AWS Lambda** | Serverless functions | `lambda/lambda_mcp_tools_handler.py` — the mock backend standing in for real company systems. The Gateway invokes it per tool call; it returns fake ticket IDs, seeded calendar events, and message confirmations from in-memory data. | CDK stack |
+| **Bedrock AgentCore Memory** | Managed conversation memory | Short-term memory store. `agents/memory_hook.py` writes every user/assistant turn to it (on a background thread) and reloads recent turns when an agent starts, so the assistant remembers context like your name within a session. | `create_memory.py` |
+| **Amazon Bedrock (model inference)** | Managed LLM hosting | The optional cloud brain: with `MODEL_PROVIDER=bedrock`, all four agents call Claude (Haiku 4.5 by default) through Bedrock's Converse API instead of local Ollama. Also hosts the Titan embedding model the KB uses either way. | AWS-hosted; enabled via Model access (Section 4d) |
+| **AWS IAM** | Permissions | Two roles matter: the Lambda's execution role, and the **Gateway execution role** — the identity the Gateway assumes when invoking the Lambda, granted `lambda:InvokeFunction` on that one function only. Your `nns-agent` profile credentials authorize everything the scripts and agents do. | CDK stack / you (Section 4) |
+| **AWS CloudFormation** | Infrastructure-as-code engine | What `cdk deploy` actually drives: the CDK Python code synthesizes a CloudFormation template, and CloudFormation creates/updates/deletes the World-1 resources as one stack. The setup scripts also read the stack's outputs (ARNs) so you never paste them. | `cdk deploy` |
+| **Amazon CloudWatch** | Logs & metrics | Every Lambda invocation and WAF decision lands here automatically — it's how you verify a Jabber "send" actually invoked the backend (`/aws/lambda/...McpToolsFunction...` log group). | Automatic |
+
+How they chain together for one question: **Guardrail** (screen input) → supervisor routes →
+specialist either queries **Knowledge Base**/**OpenSearch** (built from **S3** docs) or gets a
+**Cognito** token and calls the **Gateway** (through **WAF**) which invokes **Lambda** →
+**Guardrail** again (screen/mask output) → **Memory** records the turn. The LLM doing the
+thinking at each step is either local Ollama or **Bedrock** Claude.
+
 ### Which file does what
 
 | File | World | Job |
