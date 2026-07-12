@@ -31,6 +31,9 @@ def get_model():
             # derails mid-conversation. 8192 fits comfortably in RAM for an
             # 8B model.
             options={"num_ctx": 8192},
+            # Ollama unloads the model after 5 idle minutes by default, so
+            # the first question after a coffee break pays a ~15s reload.
+            keep_alive="30m",
         )
 
     if provider == "bedrock":

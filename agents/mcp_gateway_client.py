@@ -32,6 +32,11 @@ SCOPE_STRING = "nns-agentcore-gateway-id/gateway:read nns-agentcore-gateway-id/g
 _cached_token = None
 _cached_token_expiry = 0.0
 
+# suffix -> full Gateway tool name (e.g. "create_ticket" ->
+# "MockCompanyToolsLambda___create_ticket"). Filled by the first call so
+# later calls skip the list_tools round trip.
+_cached_tool_names: dict = {}
+
 
 def _get_access_token() -> str:
     """Gets a fresh Cognito access token, reusing the cached one until it's
@@ -58,16 +63,23 @@ def _call_tool(tool_name_suffix: str, arguments: dict) -> str:
     """Opens a short-lived connection to the Gateway, finds the tool whose
     name ends with tool_name_suffix (AgentCore prefixes each tool's name
     with the Gateway Target's name, e.g. "MockCompanyToolsLambda...create_ticket"),
-    calls it, and returns any text result."""
+    calls it, and returns any text result. The name lookup is cached after
+    the first call, saving a list_tools round trip per action."""
     token = _get_access_token()
     client = MCPClient(lambda: streamablehttp_client(GATEWAY_URL, headers={"Authorization": f"Bearer {token}"}))
 
     with client:
-        tools = client.list_tools_sync()
-        match = next((t.tool_name for t in tools if t.tool_name.endswith(tool_name_suffix)), None)
+        match = _cached_tool_names.get(tool_name_suffix)
         if match is None:
-            available = [t.tool_name for t in tools]
-            raise RuntimeError(f"No tool ending in '{tool_name_suffix}' found. Available tools: {available}")
+            tools = client.list_tools_sync()
+            for t in tools:
+                for suffix in ("create_ticket", "get_calendar_events", "send_jabber_message"):
+                    if t.tool_name.endswith(suffix):
+                        _cached_tool_names[suffix] = t.tool_name
+            match = _cached_tool_names.get(tool_name_suffix)
+            if match is None:
+                available = [t.tool_name for t in tools]
+                raise RuntimeError(f"No tool ending in '{tool_name_suffix}' found. Available tools: {available}")
 
         result = client.call_tool_sync(
             tool_use_id=str(uuid.uuid4()),

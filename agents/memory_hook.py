@@ -11,12 +11,34 @@ agent's lifecycle ("hooks") — you never call them directly:
   - on_message_added: runs every time a new message (user or assistant)
     is added to the conversation; saves it to Memory.
 """
+import queue
+import threading
+
 from bedrock_agentcore.memory import MemoryClient
 from strands.hooks import HookProvider, HookRegistry
 from strands.hooks.events import AgentInitializedEvent, MessageAddedEvent
 from aws_config import REGION
 
 memory_client = MemoryClient(region_name=REGION)
+
+# Memory writes happen on every message and each one is an AWS API call
+# (~200-300ms). A single background worker drains this queue so the chat
+# never blocks on them, while still writing in conversation order.
+_write_queue: "queue.Queue[dict]" = queue.Queue()
+
+
+def _write_worker():
+    while True:
+        kwargs = _write_queue.get()
+        try:
+            memory_client.create_event(**kwargs)
+        except Exception as e:
+            print(f"WARNING: memory write failed ({e}); continuing without it.")
+        finally:
+            _write_queue.task_done()
+
+
+threading.Thread(target=_write_worker, daemon=True).start()
 
 
 class ShortTermMemoryHookProvider(HookProvider):
@@ -33,12 +55,12 @@ class ShortTermMemoryHookProvider(HookProvider):
         session_id = event.agent.state.get("session_id")
         last = event.agent.messages[-1]
         if last["content"] and last["content"][0].get("text"):
-            self.memory_client.create_event(
+            _write_queue.put(dict(
                 memory_id=self.memory_id,
                 actor_id=actor_id,
                 session_id=session_id,
                 messages=[(last["content"][0]["text"], last["role"])],
-            )
+            ))
 
     def on_agent_initialized(self, event: AgentInitializedEvent):
         actor_id = event.agent.state.get("actor_id")
