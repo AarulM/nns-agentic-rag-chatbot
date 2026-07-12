@@ -11,15 +11,10 @@ agent's lifecycle ("hooks") — you never call them directly:
   - on_message_added: runs every time a new message (user or assistant)
     is added to the conversation; saves it to Memory.
 """
-import os
 from bedrock_agentcore.memory import MemoryClient
 from strands.hooks import HookProvider, HookRegistry
 from strands.hooks.events import AgentInitializedEvent, MessageAddedEvent
-
-REGION = os.environ.get("AWS_REGION", "us-east-1")
-
-# From create_memory.py's printed output.
-MEMORY_ID = "NnsSupervisorShortTermMemory-3BEy6kA6v7"
+from aws_config import REGION
 
 memory_client = MemoryClient(region_name=REGION)
 

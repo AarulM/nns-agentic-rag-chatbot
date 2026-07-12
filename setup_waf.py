@@ -17,19 +17,31 @@ import time
 import boto3
 
 REGION = "us-east-1"
-ACCOUNT_ID = "465733921455"
-GATEWAY_ID = "nnscompanytoolsgateway-omj3vt66ow"
+GATEWAY_NAME = "NnsCompanyToolsGateway"
 WEB_ACL_NAME = "nns-gateway-web-acl"
-
-GATEWAY_ARN = f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:gateway/{GATEWAY_ID}"
 
 wafv2 = boto3.client("wafv2", region_name=REGION)
 gateway_client = boto3.client("bedrock-agentcore-control", region_name=REGION)
 
 
-def wait_for_gateway_ready():
+def find_gateway_arn():
+    """Looks the Gateway up by name so nothing needs pasting after a rebuild."""
+    account_id = boto3.client("sts", region_name=REGION).get_caller_identity()["Account"]
+    token = None
+    while True:
+        kwargs = {"nextToken": token} if token else {}
+        page = gateway_client.list_gateways(**kwargs)
+        for g in page.get("items", []):
+            if g["name"] == GATEWAY_NAME:
+                return g["gatewayId"], f"arn:aws:bedrock-agentcore:{REGION}:{account_id}:gateway/{g['gatewayId']}"
+        token = page.get("nextToken")
+        if not token:
+            raise RuntimeError(f"No Gateway named '{GATEWAY_NAME}' — run setup_gateway.py first.")
+
+
+def wait_for_gateway_ready(gateway_id):
     for _ in range(24):
-        status = gateway_client.get_gateway(gatewayIdentifier=GATEWAY_ID)["status"]
+        status = gateway_client.get_gateway(gatewayIdentifier=gateway_id)["status"]
         if status == "READY":
             return
         print(f"Gateway status: {status}, waiting...")
@@ -110,16 +122,18 @@ def create_web_acl():
     return web_acl_arn
 
 
-def associate_with_gateway(web_acl_arn):
-    wafv2.associate_web_acl(WebACLArn=web_acl_arn, ResourceArn=GATEWAY_ARN)
-    print(f"Associated Web ACL with Gateway: {GATEWAY_ARN}")
+def associate_with_gateway(web_acl_arn, gateway_arn):
+    wafv2.associate_web_acl(WebACLArn=web_acl_arn, ResourceArn=gateway_arn)
+    print(f"Associated Web ACL with Gateway: {gateway_arn}")
 
 
 def main():
+    gateway_id, gateway_arn = find_gateway_arn()
+    print(f"Found Gateway: {gateway_id}")
     print("Waiting for Gateway to be READY...")
-    wait_for_gateway_ready()
+    wait_for_gateway_ready(gateway_id)
     web_acl_arn = create_web_acl()
-    associate_with_gateway(web_acl_arn)
+    associate_with_gateway(web_acl_arn, gateway_arn)
     print("\nDone. AWS WAF now inspects every request to your Gateway before it reaches the Lambda target.")
 
 

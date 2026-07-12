@@ -2,28 +2,17 @@
 Safety Agent — answers safety-procedure questions and can file a SMAX
 safety ticket via the MCP gateway (see mcp_gateway_client.py).
 """
-import boto3
 from strands import Agent, tool
+from knowledge_base import search_docs
 from mcp_gateway_client import create_smax_ticket
 from model_config import get_model
 from trace_log import tracing_callback_handler
-
-bedrock_agent_runtime = boto3.client("bedrock-agent-runtime")
-
-# TODO: replace with your Safety Knowledge Base ID
-SAFETY_KNOWLEDGE_BASE_ID = "RW01IL1SNT" 
 
 
 @tool
 def search_safety_docs(query: str) -> str:
     """Search shipyard safety procedures and OSHA-related company policy."""
-    response = bedrock_agent_runtime.retrieve(
-        knowledgeBaseId=SAFETY_KNOWLEDGE_BASE_ID,
-        retrievalQuery={"text": query},
-        retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": 5}},
-    )
-    chunks = [r["content"]["text"] for r in response.get("retrievalResults", [])]
-    return "\n---\n".join(chunks) if chunks else "No matching safety documents found."
+    return search_docs(query, "No matching safety documents found.")
 
 
 @tool

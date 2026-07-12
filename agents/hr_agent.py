@@ -3,27 +3,16 @@ HR Agent — answers onboarding/benefits/policy questions using a Bedrock
 Knowledge Base as its RAG tool. Same pattern reused for safety_agent.py
 and operations_agent.py, just swap the KB id, prompt, and tools.
 """
-import boto3
 from strands import Agent, tool
+from knowledge_base import search_docs
 from model_config import get_model
 from trace_log import tracing_callback_handler
-
-bedrock_agent_runtime = boto3.client("bedrock-agent-runtime")
-
-# TODO: replace with your HR Knowledge Base ID (from the Bedrock console)
-HR_KNOWLEDGE_BASE_ID = "RW01IL1SNT"
 
 
 @tool
 def search_hr_docs(query: str) -> str:
     """Search HR policies, benefits, and onboarding documents for an answer."""
-    response = bedrock_agent_runtime.retrieve(
-        knowledgeBaseId=HR_KNOWLEDGE_BASE_ID,
-        retrievalQuery={"text": query},
-        retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": 5}},
-    )
-    chunks = [r["content"]["text"] for r in response.get("retrievalResults", [])]
-    return "\n---\n".join(chunks) if chunks else "No matching HR documents found."
+    return search_docs(query, "No matching HR documents found.")
 
 
 hr_agent = Agent(

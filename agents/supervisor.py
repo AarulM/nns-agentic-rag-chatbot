@@ -14,7 +14,8 @@ from guardrail import apply_guardrail
 from hr_agent import hr_agent
 from safety_agent import safety_agent
 from operations_agent import operations_agent
-from memory_hook import ShortTermMemoryHookProvider, memory_client, MEMORY_ID
+from aws_config import MEMORY_ID
+from memory_hook import ShortTermMemoryHookProvider, memory_client
 from trace_log import tracing_callback_handler, drain_queue, trace_queue
 
 # Static for now since this is a single-user local test. In a real

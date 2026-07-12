@@ -56,8 +56,10 @@ LLM itself is swapped.
 ## Running the chat UI
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -r requirements.txt -r agents/requirements.txt
 cd agents
-pip install -r requirements.txt
 streamlit run chat_ui.py        # or: python supervisor.py for a terminal REPL
 ```
 
@@ -66,23 +68,22 @@ exported — the value is printed at the end of `setup_gateway.py`.
 
 ## Provisioning AWS resources
 
-In order:
+Works from any computer with AWS credentials configured (`aws configure`) —
+the scripts look everything up by name/stack outputs, so nothing needs
+pasting in beforehand. In order:
 
 1. `cdk deploy` — S3, Knowledge Base, Lambda, Gateway role, Guardrail.
    Upload `sample_docs/*.txt` to the docs bucket and sync the KB data source.
 2. `python setup_gateway.py` — Cognito M2M user pool + AgentCore Gateway +
-   Lambda target. Paste the Lambda/role ARNs from the CDK outputs in first;
-   paste its printed IDs into `agents/mcp_gateway_client.py` after.
-   (`finish_gateway_setup.py` resumes this if it dies partway.)
-3. `python create_memory.py` — AgentCore short-term Memory; paste the printed
-   MEMORY_ID into `agents/memory_hook.py`.
+   Lambda target. Idempotent: re-run it after any crash or any redeploy that
+   changed the Lambda/role ARNs and it repairs the wiring.
+3. `python create_memory.py` — AgentCore short-term Memory (get-or-create).
 4. `python setup_waf.py` — WAF Web ACL (managed rules + rate limit) on the
    Gateway.
 
-After any `cdk destroy` + `cdk deploy` cycle, `reconnect_gateway.py` (and
-`finish_reconnect_gateway.py` if target deletion is slow to propagate)
-re-points the surviving Gateway at the new Lambda/role — update the ARNs at
-the top first.
+Then paste the values steps 1–3 print into `agents/aws_config.py`, and the
+client secret into gitignored `agents/gateway_secrets.py`. That one file is
+the only place per-deployment IDs live on the agent side.
 
 ## Tearing everything down
 
@@ -102,11 +103,10 @@ testing — the Knowledge Base's OpenSearch collection bills hourly.
 | `nns_agentic_rag_chatbot/` | CDK stack |
 | `lambda/` | Mock SMAX/calendar/Jabber backend behind the Gateway |
 | `sample_docs/` | Seed documents for the Knowledge Base |
-| `setup_gateway.py`, `finish_gateway_setup.py` | Gateway + Cognito provisioning |
-| `create_memory.py`, `setup_waf.py` | Memory and WAF provisioning |
-| `reconnect_gateway.py`, `finish_reconnect_gateway.py` | Re-wire Gateway after a CDK redeploy |
+| `setup_gateway.py` | Gateway + Cognito provisioning/repair (idempotent) |
+| `create_memory.py`, `setup_waf.py` | Memory and WAF provisioning (idempotent) |
 | `teardown_everything.py` | Full teardown (boto3 resources + CDK stack) |
 
-Hardcoded resource IDs (Gateway ID, Memory ID, KB ID, ARNs) throughout the
-scripts and agents are point-in-time values for the current deployment — they
-change on every teardown/rebuild and need re-pasting.
+Per-deployment resource IDs live in exactly one place on the agent side —
+`agents/aws_config.py` (env vars override) — and change on every
+teardown/rebuild; the setup scripts print the new values in paste-ready form.

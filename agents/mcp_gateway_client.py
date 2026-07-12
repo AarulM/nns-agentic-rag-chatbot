@@ -1,10 +1,8 @@
 """
-Real MCP client wired to the AgentCore Gateway created by setup_gateway.py
-+ finish_gateway_setup.py. Same three function names as the old mock
-stub file (create_smax_ticket, get_calendar_events, send_jabber_message)
-so safety_agent.py and operations_agent.py don't need to change at all —
-only what happens inside these functions changed, from an in-memory fake
-to a real call through the Gateway to our mock Lambda.
+Real MCP client wired to the AgentCore Gateway created by setup_gateway.py.
+Exposes three plain functions (create_smax_ticket, get_calendar_events,
+send_jabber_message) that safety_agent.py and operations_agent.py wrap as
+tools; each one calls through the Gateway to our mock Lambda.
 
 The Cognito client secret is the one real credential here, so it lives
 outside source control: either export COGNITO_CLIENT_SECRET, or put it in
@@ -17,12 +15,7 @@ import uuid
 import requests
 from strands.tools.mcp.mcp_client import MCPClient
 from mcp.client.streamable_http import streamablehttp_client
-
-# From setup_gateway.py's final printed output.
-GATEWAY_URL = "https://nnscompanytoolsgateway-omj3vt66ow.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp"
-COGNITO_DOMAIN = "nns-agentcore-dcnwgvsya"
-COGNITO_CLIENT_ID = "23ddablie1urm7mov53i1ltdba"
-REGION = "us-east-1"
+from aws_config import REGION, GATEWAY_URL, COGNITO_DOMAIN, COGNITO_CLIENT_ID
 
 COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET")
 if not COGNITO_CLIENT_SECRET:

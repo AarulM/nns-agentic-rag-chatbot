@@ -1,27 +1,17 @@
 """
 Operations Agent — SOP lookup plus calendar/ticket/Jabber actions via MCP.
 """
-import boto3
 from strands import Agent, tool
+from knowledge_base import search_docs
 from mcp_gateway_client import create_smax_ticket, get_calendar_events, send_jabber_message
 from model_config import get_model
 from trace_log import tracing_callback_handler
-
-bedrock_agent_runtime = boto3.client("bedrock-agent-runtime")
-
-OPS_KNOWLEDGE_BASE_ID = "RW01IL1SNT"
 
 
 @tool
 def search_ops_docs(query: str) -> str:
     """Search shipbuilding SOPs, schedules, and operations procedures."""
-    response = bedrock_agent_runtime.retrieve(
-        knowledgeBaseId=OPS_KNOWLEDGE_BASE_ID,
-        retrievalQuery={"text": query},
-        retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": 5}},
-    )
-    chunks = [r["content"]["text"] for r in response.get("retrievalResults", [])]
-    return "\n---\n".join(chunks) if chunks else "No matching operations documents found."
+    return search_docs(query, "No matching operations documents found.")
 
 
 @tool
