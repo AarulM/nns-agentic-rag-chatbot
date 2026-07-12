@@ -52,6 +52,12 @@ supervisor = Agent(
     name="supervisor",
     model=get_model(),
     callback_handler=tracing_callback_handler,
+    # NOTE: this prompt is deliberately back to the last version that tested
+    # reliably with llama3.1:8b. Restructuring it (numbered decision lists,
+    # "answer general questions yourself" rules) made the 8B model loop on
+    # tools or reply with small talk after tool results. General-question
+    # handling lives in the specialists' prompts instead, which the model
+    # follows fine.
     system_prompt=(
         "You are the front-door assistant for a shipbuilding company's internal "
         "chatbot, used by employees, new hires, and interns. Respond warmly and "

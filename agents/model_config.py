@@ -20,10 +20,11 @@ def get_model():
             host="http://localhost:11434",
             model_id=os.environ.get("OLLAMA_MODEL_ID", "llama3.1:8b"),
             # An 8B model at Ollama's default temperature (0.8) is a coin
-            # flip on tool routing and synthesis — some runs it answers
-            # perfectly, others it rambles about "question format". Near-zero
-            # temperature makes it behave the same way every run.
-            temperature=0.1,
+            # flip on tool routing and synthesis, and even 0.1 left enough
+            # randomness that one unlucky turn would poison the rest of the
+            # conversation. 0 = greedy decoding: same input, same output,
+            # every time — reliability matters more than variety here.
+            temperature=0.0,
             # Ollama's default context window is tiny (2048 tokens). Once a
             # chat plus tool definitions outgrows it, Ollama silently drops
             # the OLDEST tokens — the system prompt — and the agent visibly

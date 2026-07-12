@@ -15,7 +15,9 @@ REGION = os.environ.get("AWS_REGION", "us-east-1")
 # From the `cdk deploy` outputs.
 KNOWLEDGE_BASE_ID = os.environ.get("KNOWLEDGE_BASE_ID", "RW01IL1SNT")
 GUARDRAIL_ID = os.environ.get("GUARDRAIL_ID", "j9ikgpkaom8a")
-GUARDRAIL_VERSION = os.environ.get("GUARDRAIL_VERSION", "1")
+# DRAFT always reflects the latest deployed stack config, so guardrail
+# edits take effect on the next `cdk deploy` with no version bookkeeping.
+GUARDRAIL_VERSION = os.environ.get("GUARDRAIL_VERSION", "DRAFT")
 
 # From setup_gateway.py's printed output.
 GATEWAY_URL = os.environ.get(

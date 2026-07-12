@@ -95,9 +95,12 @@ class NnsAgenticRagChatbotStack(Stack):
                 ]
             ),
             sensitive_information_policy_config=cfn_bedrock.CfnGuardrail.SensitiveInformationPolicyConfigProperty(
+                # NAME is deliberately absent: anonymizing it turned every
+                # answer mentioning any person ("Your name is {NAME}", "the
+                # president is {NAME}") into nonsense for a chatbot demo.
                 pii_entities_config=[
                     cfn_bedrock.CfnGuardrail.PiiEntityConfigProperty(type=pii_type, action="ANONYMIZE")
-                    for pii_type in ("EMAIL", "PHONE", "NAME", "US_SOCIAL_SECURITY_NUMBER")
+                    for pii_type in ("EMAIL", "PHONE", "US_SOCIAL_SECURITY_NUMBER")
                 ]
             ),
             topic_policy_config=cfn_bedrock.CfnGuardrail.TopicPolicyConfigProperty(
