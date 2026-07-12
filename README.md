@@ -8,20 +8,10 @@ calendar, messages) through an AgentCore Gateway.
 
 ## Architecture
 
-```
-Streamlit UI (local)                        AWS
-      │
-      ▼
-supervisor ──agents-as-tools──► hr_agent ─────► Bedrock Knowledge Base
-   │ │                          safety_agent ──►   (S3 docs → Titan embeddings)
-   │ │                          operations_agent
-   │ └── AgentCore Memory                │
-   │     (short-term history)            ▼
-   │                            AgentCore Gateway (MCP, Cognito M2M auth, WAF)
-   └── Bedrock Guardrail                 │
-       (ApplyGuardrail on every          ▼
-        input & output)         mock Lambda (SMAX tickets / calendar / Jabber)
-```
+![AWS architecture diagram](docs/architecture.png)
+
+(Diagram-as-code: regenerate with `python docs/architecture_diagram.py` —
+needs `pip install diagrams` and GraphViz.)
 
 - **CDK stack** (`nns_agentic_rag_chatbot/`): S3 docs bucket, Knowledge Base +
   data source, mock-tools Lambda, Gateway execution role, Bedrock Guardrail.
