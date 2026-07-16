@@ -27,5 +27,7 @@ GATEWAY_URL = os.environ.get(
 COGNITO_DOMAIN = os.environ.get("COGNITO_DOMAIN", "nns-agentcore-dcnwgvsya")
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "23ddablie1urm7mov53i1ltdba")
 
-# From create_memory.py's printed output.
-MEMORY_ID = os.environ.get("MEMORY_ID", "NnsSupervisorShortTermMemory-3BEy6kA6v7")
+# The DynamoDB table create_memory.py makes (AgentCore Memory isn't
+# available in GovCloud, so memory lives in DynamoDB). Fixed name, no
+# random suffix — nothing to paste after a rebuild.
+MEMORY_TABLE = os.environ.get("MEMORY_TABLE", "NnsChatbotMemory")

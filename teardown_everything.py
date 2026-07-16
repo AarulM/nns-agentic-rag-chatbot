@@ -23,7 +23,7 @@ import boto3
 REGION = "us-east-1"
 GATEWAY_NAME = "NnsCompanyToolsGateway"
 WEB_ACL_NAME = "nns-gateway-web-acl"
-MEMORY_NAME = "NnsSupervisorShortTermMemory"
+MEMORY_TABLE = "NnsChatbotMemory"
 USER_POOL_NAME = "nns-agentcore-gateway-pool"
 
 wafv2 = boto3.client("wafv2", region_name=REGION)
@@ -112,23 +112,15 @@ def teardown_gateway(gateway_id):
 
 # ---------- 3. Memory ----------
 def teardown_memory():
-    step("AgentCore Memory")
-    from bedrock_agentcore.memory import MemoryClient
-    memory_client = MemoryClient(region_name=REGION)
-    # Memory IDs are the name plus a random suffix (Name-abc123...).
-    matches = [
-        m["id"] for m in memory_client.list_memories()
-        if str(m.get("id", "")).startswith(f"{MEMORY_NAME}-")
-    ]
-    if not matches:
-        print("Memory already gone — skipping.")
-        return
-    for memory_id in matches:
-        try:
-            memory_client.delete_memory(memory_id=memory_id)
-            print(f"Deleted memory: {memory_id}")
-        except Exception as e:
-            print(f"WARNING: could not delete memory {memory_id} ({e}). Check the console manually.")
+    step("Memory (DynamoDB table)")
+    dynamodb = boto3.client("dynamodb", region_name=REGION)
+    try:
+        dynamodb.delete_table(TableName=MEMORY_TABLE)
+        print(f"Deleted memory table: {MEMORY_TABLE}")
+    except dynamodb.exceptions.ResourceNotFoundException:
+        print("Memory table already gone — skipping.")
+    except Exception as e:
+        print(f"WARNING: could not delete table {MEMORY_TABLE} ({e}). Check the console manually.")
 
 
 # ---------- 4. Cognito ----------

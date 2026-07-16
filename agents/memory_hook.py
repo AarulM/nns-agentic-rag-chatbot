@@ -1,25 +1,82 @@
 """
-Short-term memory hook for the supervisor agent, backed by AgentCore
-Memory. Lets the chatbot remember earlier turns in the same conversation
+Short-term memory hook for the supervisor agent, backed by a DynamoDB
+table. Lets the chatbot remember earlier turns in the same conversation
 (the user's name, what they already asked, etc.) without you writing any
 storage code yourself.
+
+This used to be backed by AgentCore Memory, but that service is not
+available in AWS GovCloud (see
+https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/govcloud-bedrock-agentcore.html),
+so DynamoDBMemoryClient below is a drop-in replacement exposing the same
+two calls the hook needs: create_event (save a turn) and get_last_k_turns
+(reload recent history). Everything else — the hook, the background write
+queue — is unchanged.
 
 Strands calls these two functions automatically at specific points in an
 agent's lifecycle ("hooks") — you never call them directly:
   - on_agent_initialized: runs once when the Agent object is created;
-    loads recent history and adds it to the system prompt.
+    loads recent history and adds it to the conversation.
   - on_message_added: runs every time a new message (user or assistant)
     is added to the conversation; saves it to Memory.
 """
 import queue
 import threading
+import time
 
-from bedrock_agentcore.memory import MemoryClient
+import boto3
+from boto3.dynamodb.conditions import Key
 from strands.hooks import HookProvider, HookRegistry
 from strands.hooks.events import AgentInitializedEvent, MessageAddedEvent
 from aws_config import REGION
 
-memory_client = MemoryClient(region_name=REGION)
+# Conversation events expire after 7 days via the table's TTL, matching the
+# old AgentCore event_expiry_days=7.
+_EVENT_EXPIRY_SECONDS = 7 * 24 * 3600
+
+
+class DynamoDBMemoryClient:
+    """Drop-in replacement for AgentCore's MemoryClient, backed by DynamoDB.
+
+    memory_id is the DynamoDB table name (MEMORY_TABLE in aws_config.py).
+    Each message is one item under a SESSION#actor#session partition, sorted
+    by a nanosecond timestamp so history reads back in order.
+    """
+
+    def __init__(self, region_name: str):
+        self._dynamodb = boto3.resource("dynamodb", region_name=region_name)
+
+    def create_event(self, memory_id: str, actor_id: str, session_id: str,
+                     messages: list[tuple[str, str]]):
+        table = self._dynamodb.Table(memory_id)
+        for text, role in messages:
+            table.put_item(Item={
+                "PK": f"SESSION#{actor_id}#{session_id}",
+                "SK": f"{time.time_ns():020d}",
+                "role": role,
+                "text": text,
+                "expires_at": int(time.time()) + _EVENT_EXPIRY_SECONDS,
+            })
+
+    def get_last_k_turns(self, memory_id: str, actor_id: str, session_id: str,
+                         k: int) -> list[list[dict]]:
+        """Returns the most recent messages, newest-first, in the same shape
+        AgentCore returned: a list of turns, each a list of
+        {"role": ..., "content": {"text": ...}} messages (here, one message
+        per turn). A turn is user + assistant, so k turns = 2*k messages.
+        """
+        table = self._dynamodb.Table(memory_id)
+        response = table.query(
+            KeyConditionExpression=Key("PK").eq(f"SESSION#{actor_id}#{session_id}"),
+            ScanIndexForward=False,  # newest first
+            Limit=2 * k,
+        )
+        return [
+            [{"role": item["role"], "content": {"text": item["text"]}}]
+            for item in response.get("Items", [])
+        ]
+
+
+memory_client = DynamoDBMemoryClient(region_name=REGION)
 
 # Memory writes happen on every message and each one is an AWS API call
 # (~200-300ms). A single background worker drains this queue so the chat
@@ -42,7 +99,7 @@ threading.Thread(target=_write_worker, daemon=True).start()
 
 
 class ShortTermMemoryHookProvider(HookProvider):
-    def __init__(self, memory_client: MemoryClient, memory_id: str):
+    def __init__(self, memory_client: DynamoDBMemoryClient, memory_id: str):
         self.memory_client = memory_client
         self.memory_id = memory_id
 
@@ -65,12 +122,24 @@ class ShortTermMemoryHookProvider(HookProvider):
     def on_agent_initialized(self, event: AgentInitializedEvent):
         actor_id = event.agent.state.get("actor_id")
         session_id = event.agent.state.get("session_id")
-        recent_turns = self.memory_client.get_last_k_turns(
-            memory_id=self.memory_id,
-            actor_id=actor_id,
-            session_id=session_id,
-            k=5,
-        )
+        # This runs at Agent construction, i.e. at app startup. If memory is
+        # unreachable (table not created yet, missing IAM permissions, bad
+        # credentials), start with an empty history instead of crashing the
+        # whole app — memory is a nice-to-have, answering questions isn't.
+        try:
+            recent_turns = self.memory_client.get_last_k_turns(
+                memory_id=self.memory_id,
+                actor_id=actor_id,
+                session_id=session_id,
+                k=5,
+            )
+        except Exception as e:
+            print(
+                f"WARNING: could not load conversation memory ({e}). "
+                f"Starting without it — if the DynamoDB table '{self.memory_id}' "
+                "doesn't exist yet, run: python create_memory.py"
+            )
+            return
         # Seed real conversation history (event.agent.messages) instead of
         # gluing raw "role: text" lines onto the system prompt. Small local
         # models handle actual prior turns fine, but get confused by a

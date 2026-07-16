@@ -45,12 +45,17 @@ def _get_access_token() -> str:
     if _cached_token and time.time() < _cached_token_expiry:
         return _cached_token
 
-    token_url = f"https://{COGNITO_DOMAIN}.auth.{REGION}.amazoncognito.com/oauth2/token"
+    # GovCloud Cognito uses a different domain scheme than commercial:
+    # <domain>.auth-fips.<region>.amazoncognito.com (plain .auth. doesn't
+    # exist there and fails DNS resolution).
+    auth_host = "auth-fips" if REGION.startswith("us-gov") else "auth"
+    token_url = f"https://{COGNITO_DOMAIN}.{auth_host}.{REGION}.amazoncognito.com/oauth2/token"
     response = requests.post(
         token_url,
         data={"grant_type": "client_credentials", "scope": SCOPE_STRING},
         auth=(COGNITO_CLIENT_ID, COGNITO_CLIENT_SECRET),
         headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=30,
     )
     response.raise_for_status()
     payload = response.json()

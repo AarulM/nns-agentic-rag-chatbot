@@ -16,6 +16,7 @@ with explicit labels.
 from diagrams import Cluster, Diagram, Edge
 from diagrams.aws.analytics import AmazonOpensearchService
 from diagrams.aws.compute import Lambda
+from diagrams.aws.database import Dynamodb
 from diagrams.aws.ml import Bedrock
 from diagrams.aws.security import WAF, Cognito
 from diagrams.aws.storage import S3
@@ -51,8 +52,9 @@ with Diagram(
     with Cluster("AWS us-east-1"):
         with Cluster("Bedrock services"):
             guardrail = Bedrock("Guardrail\n(ApplyGuardrail on\nevery input & output)")
-            memory = Bedrock("AgentCore Memory\n(short-term history)")
             bedrock_llm = Bedrock("Claude\n(MODEL_PROVIDER=bedrock)")
+
+        memory = Dynamodb("DynamoDB memory table\n(turns + long-term facts)")
 
         with Cluster("RAG — CDK stack"):
             docs_bucket = S3("Company docs bucket\n(sample_docs/*.txt)")

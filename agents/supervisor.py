@@ -10,13 +10,26 @@ import json
 import re
 import uuid
 from strands import Agent, tool
-from model_config import get_model
+from model_config import get_model, PROVIDER
 from guardrail import apply_guardrail
 from hr_agent import hr_agent
 from safety_agent import safety_agent
 from operations_agent import operations_agent
-from aws_config import MEMORY_ID
+from aws_config import MEMORY_TABLE
 from memory_hook import ShortTermMemoryHookProvider, memory_client
+
+# Long-term memory needs strands.memory (strands-agents >= 1.47, pinned in
+# agents/requirements.txt). On an older install, run the app without it
+# instead of crashing — short-term memory above still works.
+try:
+    from strands.memory import MemoryManager
+    from memory_store import UserFactStore
+except ImportError as e:
+    MemoryManager = None
+    print(
+        f"WARNING: long-term memory disabled ({e}). "
+        "Upgrade with: pip install -U 'strands-agents[ollama]'"
+    )
 from trace_log import tracing_callback_handler, drain_queue, trace_queue
 
 # Static actor for this single-user local test; in a real deployment it
@@ -86,7 +99,35 @@ supervisor = Agent(
         "processes that weren't in that result."
     ),
     tools=[ask_hr, ask_safety, ask_operations],
-    hooks=[ShortTermMemoryHookProvider(memory_client, MEMORY_ID)],
+    hooks=[ShortTermMemoryHookProvider(memory_client, MEMORY_TABLE)],
+    # Long-term memory (Strands MemoryManager, DynamoDB-backed — see
+    # memory_store.py): facts about the user are auto-extracted in the
+    # background and injected back into context on each user turn.
+    # search_tool_config=False on purpose: recall happens via injection, so
+    # the tool adds nothing but risk — when llama3.1:8b had a search_memory
+    # tool, it hallucinated fake tool-result JSON in its replies ("Your
+    # supervisor is John Smith"), and extraction then saved that fiction as
+    # a real fact. No new tool also means routing behaves exactly as before.
+    # Long-term memory (Strands MemoryManager over DynamoDB — see
+    # memory_store.py): facts about the user are auto-extracted in the
+    # background and injected into context on later turns, across sessions.
+    # Bedrock-only, like the guardrail, and after extensive testing — with
+    # llama3.1:8b it is strictly net-negative: injected memory derails it
+    # (it answered "what is my badge number?" with small talk or a loop of
+    # ask_operations calls, whatever the injection format), and as the
+    # extraction model it invents facts out of thin air ("supervisor is
+    # John Smith") that then poison every later session. Claude recalls
+    # cleanly with zero tool derailing. search_tool_config=False because
+    # injection already covers recall — a search_memory tool adds nothing
+    # but another way for a model to go sideways.
+    memory_manager=(
+        MemoryManager(
+            stores=[UserFactStore(MEMORY_TABLE, ACTOR_ID)],
+            search_tool_config=False,
+        )
+        if PROVIDER == "bedrock" and MemoryManager is not None
+        else None
+    ),
     state={"actor_id": ACTOR_ID, "session_id": SESSION_ID},
 )
 

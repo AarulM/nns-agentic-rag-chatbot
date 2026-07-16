@@ -1,4 +1,6 @@
-strands-agents[ollama]
+# >=1.47 for strands.memory (long-term memory); older versions run but
+# supervisor.py will print a warning and disable long-term memory.
+strands-agents[ollama]>=1.47.0
 strands-agents-tools
 bedrock-agentcore
 boto3

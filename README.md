@@ -28,6 +28,7 @@ company knowledge base:
 5. [Fresh-terminal checklist (you need this every time)](#5-fresh-terminal-checklist-you-need-this-every-time)
 6. [Get the code running locally](#6-get-the-code-running-locally)
 7. [Deploy the AWS resources (the rebuild runbook)](#7-deploy-the-aws-resources-the-rebuild-runbook)
+   — includes [Running in AWS GovCloud](#running-in-aws-govcloud)
 8. [Choose your model brain (Ollama vs Bedrock)](#8-choose-your-model-brain-ollama-vs-bedrock)
 9. [Run the chatbot](#9-run-the-chatbot)
 10. [Smoke test](#10-smoke-test)
@@ -79,8 +80,10 @@ HR agent  /  Safety agent  /  Operations agent
 Guardrail checks the answer (blocks disallowed output, masks emails/phones/SSNs)
 ```
 
-AgentCore Memory records every turn; within one app run the assistant remembers the
+A DynamoDB memory table records every turn; within one app run the assistant remembers the
 conversation. Each app restart starts a fresh memory session on purpose (see troubleshooting).
+In Bedrock mode, durable facts you state about yourself (name, badge number, supervisor) are
+also extracted into long-term memory and recalled in future sessions.
 
 ### The AWS services used, and what each one does here
 
@@ -94,8 +97,8 @@ conversation. Each app restart starts a fresh memory session on purpose (see tro
 | **Amazon Cognito** | Identity / OAuth service | Machine-to-machine auth for the Gateway. A Cognito "user pool" holds an app client (ID + secret); the agent exchanges those for a short-lived JWT access token (`client_credentials` flow), and the Gateway only accepts requests carrying a valid token. This is why `gateway_secrets.py` exists. | `setup_gateway.py` |
 | **AWS WAF** | Web application firewall | Sits in front of the Gateway's public URL: two AWS managed rule sets (common exploits, known bad inputs) plus a 2000-requests-per-5-min-per-IP rate limit. Optional hardening — Cognito already gates access. | `setup_waf.py` |
 | **AWS Lambda** | Serverless functions | `lambda/lambda_mcp_tools_handler.py` — the mock backend standing in for real company systems. The Gateway invokes it per tool call; it returns fake ticket IDs, seeded calendar events, and message confirmations from in-memory data. | CDK stack |
-| **Bedrock AgentCore Memory** | Managed conversation memory | Short-term memory store. `agents/memory_hook.py` writes every user/assistant turn to it (on a background thread) and reloads recent turns when an agent starts, so the assistant remembers context like your name within a session. | `create_memory.py` |
-| **Amazon Bedrock (model inference)** | Managed LLM hosting | The optional cloud brain: with `MODEL_PROVIDER=bedrock`, all four agents call Claude (Haiku 4.5 by default) through Bedrock's Converse API instead of local Ollama. Also hosts the Titan embedding model the KB uses either way. | AWS-hosted; enabled via Model access (Section 4d) |
+| **Amazon DynamoDB** | Serverless NoSQL database | The memory store — one table holds both kinds of memory. Short-term: `agents/memory_hook.py` writes every user/assistant turn (on a background thread, 7-day TTL) and reloads recent turns when an agent starts. Long-term (Bedrock mode): `agents/memory_store.py` keeps durable user facts, auto-extracted by Strands' MemoryManager and injected into context across sessions. AgentCore Memory was used originally, but it isn't available in AWS GovCloud — DynamoDB is. | `create_memory.py` |
+| **Amazon Bedrock (model inference)** | Managed LLM hosting | The optional cloud brain: with `MODEL_PROVIDER=bedrock`, all four agents call Claude (Haiku 4.5 by default; Sonnet 4.5 in GovCloud) through Bedrock's Converse API instead of local Ollama. Also hosts the Titan embedding model the KB uses either way. | AWS-hosted; enabled via Model access (Section 4d) |
 | **AWS IAM** | Permissions | Two roles matter: the Lambda's execution role, and the **Gateway execution role** — the identity the Gateway assumes when invoking the Lambda, granted `lambda:InvokeFunction` on that one function only. Your `nns-agent` profile credentials authorize everything the scripts and agents do. | CDK stack / you (Section 4) |
 | **AWS CloudFormation** | Infrastructure-as-code engine | What `cdk deploy` actually drives: the CDK Python code synthesizes a CloudFormation template, and CloudFormation creates/updates/deletes the World-1 resources as one stack. The setup scripts also read the stack's outputs (ARNs) so you never paste them. | `cdk deploy` |
 | **Amazon CloudWatch** | Logs & metrics | Every Lambda invocation and WAF decision lands here automatically — it's how you verify a Jabber "send" actually invoked the backend (`/aws/lambda/...McpToolsFunction...` log group). | Automatic |
@@ -115,7 +118,7 @@ thinking at each step is either local Ollama or **Bedrock** Claude.
 | `lambda/lambda_mcp_tools_handler.py` | 1 | Mock ticket/calendar/Jabber backend |
 | `sample_docs/*.txt` | 1 | The only knowledge the RAG system can draw on |
 | `setup_gateway.py` | 1 | Cognito auth + Gateway + Lambda MCP target. **Idempotent** — re-run it after any crash or redeploy and it repairs itself |
-| `create_memory.py` | 1 | AgentCore Memory store (get-or-create, safe to re-run) |
+| `create_memory.py` | 1 | DynamoDB memory table (get-or-create, safe to re-run) |
 | `setup_waf.py` | 1 | Optional firewall in front of the Gateway |
 | `teardown_everything.py` | 1 | Deletes all AWS resources to stop costs — finds everything by name, nothing to edit |
 | `agents/aws_config.py` | 2 | **The one place all resource IDs live** (env vars override) |
@@ -126,7 +129,8 @@ thinking at each step is either local Ollama or **Bedrock** Claude.
 | `agents/supervisor.py` | 2 | Router — "agents as tools" pattern, plus greeting fast-path and guardrail wiring |
 | `agents/guardrail.py` | 2 | Runs the Bedrock Guardrail on every input/output (works in Ollama mode too) |
 | `agents/mcp_gateway_client.py` | 2 | Logs into the Gateway, calls the action tools |
-| `agents/memory_hook.py` | 2 | Saves/reloads conversation turns |
+| `agents/memory_hook.py` | 2 | Saves/reloads conversation turns (short-term memory) |
+| `agents/memory_store.py` | 2 | Long-term user facts via Strands MemoryManager (Bedrock mode) |
 | `agents/trace_log.py` | 2 | Queue that carries live tool-call events to the UI |
 | `agents/chat_ui.py` | 2 | Local Streamlit chat interface |
 | `docs/architecture_diagram.py` | — | Regenerates `docs/architecture.png` (diagram-as-code) |
@@ -361,8 +365,28 @@ two paste-ready blocks (Gateway URL, Cognito domain/client ID, and the client se
 python create_memory.py
 ```
 
-Prints `MEMORY_ID = "..."` — keep it for Step 6. Safe to re-run; if the memory already
-exists it just prints the existing ID.
+Creates the `NnsChatbotMemory` DynamoDB table. The name is fixed and already matches the
+default in `agents/aws_config.py`, so there is nothing to paste. Safe to re-run; if the
+table already exists it just says so.
+
+How memory works after this:
+
+- **Short-term** (all modes): every user/assistant turn is saved to the table on a
+  background thread and the last 5 turns are reloaded when the app starts. Turns expire
+  after 7 days automatically (DynamoDB TTL).
+- **Long-term** (`MODEL_PROVIDER=bedrock` only): durable facts you state about yourself
+  ("my badge number is 40213", "my supervisor is Priya") are extracted in the background
+  by Strands' MemoryManager (`agents/memory_store.py`) and injected back into context in
+  **future sessions** — the assistant remembers you across app restarts. Ollama mode
+  skips this on purpose: llama3.1:8b mis-handles injected memory and invents facts
+  during extraction (details in the `memory_manager` comment in `agents/supervisor.py`).
+- **If you skip this step**, the app still runs — it prints a warning telling you to run
+  `create_memory.py` and answers questions without memory.
+
+The IAM identity running the app needs DynamoDB permissions on this table:
+`CreateTable`/`DescribeTable`/`UpdateTimeToLive` (setup script), and
+`PutItem`/`Query`/`BatchWriteItem`/`DeleteTable` (app + teardown). An
+`AmazonDynamoDBFullAccess`-style policy covers all of it.
 
 ### Step 5 — (Optional) Firewall
 
@@ -378,8 +402,8 @@ python setup_waf.py
 ### Step 6 — Paste the values into the two agent config files
 
 1. Open **`agents/aws_config.py`** and update: `KNOWLEDGE_BASE_ID` and `GUARDRAIL_ID` (from
-   Step 1's outputs), `GATEWAY_URL` / `COGNITO_DOMAIN` / `COGNITO_CLIENT_ID` (from Step 3),
-   and `MEMORY_ID` (from Step 4).
+   Step 1's outputs), and `GATEWAY_URL` / `COGNITO_DOMAIN` / `COGNITO_CLIENT_ID` (from
+   Step 3). (`MEMORY_TABLE` needs no update — Step 4 uses a fixed table name.)
 2. Create **`agents/gateway_secrets.py`** (it's gitignored, so it won't exist on a fresh
    clone) containing one line, with the secret Step 3 printed:
 
@@ -394,6 +418,33 @@ python -c "import sys; sys.path.insert(0, 'agents'); import aws_config as c; pri
 ```
 
 You are now fully deployed.
+
+### Running in AWS GovCloud
+
+The same runbook works in GovCloud (us-gov-west-1 / us-gov-east-1) with these differences,
+all already handled by the code once `AWS_REGION` is set:
+
+```bash
+export AWS_REGION=us-gov-west-1     # before every script and before running the app
+```
+
+- **Memory:** Bedrock AgentCore Memory does **not exist in GovCloud**
+  ([docs](https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/govcloud-bedrock-agentcore.html)),
+  which is why memory lives in DynamoDB (available everywhere). Just run
+  `python create_memory.py` once with the region exported — nothing else changes.
+- **Cognito token URL:** GovCloud uses `<domain>.auth-fips.<region>.amazoncognito.com`
+  instead of `.auth.`. `agents/mcp_gateway_client.py` picks the right one from
+  `AWS_REGION` automatically.
+- **Bedrock models:** GovCloud has no `global.` inference profiles and no Haiku 4.5; its
+  profiles are prefixed `us-gov.` and the FedRAMP-authorized Claude models there are
+  Sonnet 4.5, 3.7 Sonnet, 3.5 Sonnet, and Claude 3 Haiku. With `AWS_REGION=us-gov-*` the
+  code defaults to `us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0`. If that ID isn't
+  enabled in your account, list what is and export it:
+
+  ```bash
+  aws bedrock list-inference-profiles --query "inferenceProfileSummaries[].inferenceProfileId"
+  export BEDROCK_MODEL_ID=<one of the printed IDs>
+  ```
 
 ---
 
@@ -516,6 +567,7 @@ lags ~24h — trust this command, not the dashboard.
 | Gateway tool calls fail (401/auth) | Stale Gateway/Cognito values or secret after a rebuild | Re-run `setup_gateway.py`, re-paste Step 6 values |
 | Answers derail onto random topics mid-chat (Ollama) | Small-model drift; long chats | Restart the app (each run starts a clean memory session); keep `temperature=0`; or switch to Bedrock |
 | Assistant forgets your name after many turns | Memory replays only the last 5 turns | Raise `k=5` in `agents/memory_hook.py` |
+| Doesn't remember you across app restarts (Ollama) | Long-term memory is Bedrock-only — llama3.1:8b derails on injected memory and invents facts during extraction | `export MODEL_PROVIDER=bedrock`; see the `memory_manager` comment in `agents/supervisor.py` |
 | Raw JSON like `{"name": "ask_operations"...}` as the answer | Small model emits the tool call as text | Already auto-recovered in `supervisor.py`; if you see it, check that code path survived your edits |
 | Names/emails show as `{EMAIL}`/`{PHONE}` | Guardrail PII anonymization (by design) | Edit the PII list in the CDK stack + `cdk deploy` (takes effect immediately — guardrail runs as DRAFT) |
 | Everything refused ("Sorry, I can't help with that") | Guardrail misconfig or stale `GUARDRAIL_ID` | Compare `GUARDRAIL_ID` with the CDK outputs; test with `python -c` ApplyGuardrail |
@@ -525,7 +577,7 @@ lags ~24h — trust this command, not the dashboard.
 ### General debugging habits for this repo
 
 - **One command at a time** — read each script's output before running the next.
-- **`grep` after editing config:** `grep -rn "aws_config\|KNOWLEDGE_BASE_ID\|MEMORY_ID" agents/`
+- **`grep` after editing config:** `grep -rn "aws_config\|KNOWLEDGE_BASE_ID\|MEMORY_TABLE" agents/`
   — resource IDs should appear only in `agents/aws_config.py`.
 - **When agent answers look wrong, check the tool trace first** (the Streamlit status box):
   wrong routing, no tool call, or a failing tool each point to a different fix above.
@@ -533,6 +585,6 @@ lags ~24h — trust this command, not the dashboard.
 ---
 
 *Fixed names the scripts search by (do not change casually): Gateway `NnsCompanyToolsGateway`,
-user pool `nns-agentcore-gateway-pool`, client `nns-agentcore-gateway-client`, memory
-`NnsSupervisorShortTermMemory`, Web ACL `nns-gateway-web-acl`, stack
+user pool `nns-agentcore-gateway-pool`, client `nns-agentcore-gateway-client`, memory table
+`NnsChatbotMemory`, Web ACL `nns-gateway-web-acl`, stack
 `NnsAgenticRagChatbotStack`. Region: `us-east-1`.*

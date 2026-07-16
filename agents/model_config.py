@@ -10,9 +10,13 @@ accidentally rack up Bedrock charges while testing.
 """
 import os
 
+# Exposed so other modules can gate Bedrock-only features (long-term memory
+# in supervisor.py, like the guardrail below) on the active provider.
+PROVIDER = os.environ.get("MODEL_PROVIDER", "ollama").lower()
+
 
 def get_model():
-    provider = os.environ.get("MODEL_PROVIDER", "ollama").lower()
+    provider = PROVIDER
 
     if provider == "ollama":
         from strands.models.ollama import OllamaModel
@@ -38,15 +42,22 @@ def get_model():
 
     if provider == "bedrock":
         from strands.models import BedrockModel
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        # Commercial: Claude Haiku 4.5 (cheapest Claude tier) via the global
+        # inference profile. GovCloud has neither Haiku 4.5 nor "global."
+        # profiles — its profiles are prefixed "us-gov." and Sonnet 4.5 is
+        # the FedRAMP-authorized Claude there. Either way, export
+        # BEDROCK_MODEL_ID to override (list what your region actually has:
+        # aws bedrock list-inference-profiles
+        #   --query "inferenceProfileSummaries[].inferenceProfileId").
+        default_model_id = (
+            "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0"
+            if region.startswith("us-gov")
+            else "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+        )
         kwargs = dict(
-            # Claude Haiku 4.5 (cheapest Claude tier) via the global
-            # inference profile. Export BEDROCK_MODEL_ID to use a bigger
-            # model, e.g. global.anthropic.claude-sonnet-4-5-20250929-v1:0.
-            model_id=os.environ.get(
-                "BEDROCK_MODEL_ID",
-                "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-            ),
-            region_name=os.environ.get("AWS_REGION", "us-east-1"),
+            model_id=os.environ.get("BEDROCK_MODEL_ID", default_model_id),
+            region_name=region,
         )
         # Guardrail is optional — only applied if these env vars are set
         # (values come from the GuardrailId/GuardrailVersion CDK outputs).
