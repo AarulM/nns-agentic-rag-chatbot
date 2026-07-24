@@ -1,8 +1,36 @@
-# >=1.47 for strands.memory (long-term memory); older versions run but
-# supervisor.py will print a warning and disable long-term memory.
-strands-agents[ollama]>=1.47.0
-strands-agents-tools
-bedrock-agentcore
-boto3
-requests
-streamlit
+# Runtime dependencies for the chatbot itself.
+#
+# Exact pins so a clone reproduces this environment rather than whatever
+# happens to be current. One is load-bearing rather than merely pinned:
+# strands-agents 1.47 is the first release with strands.memory, and on
+# anything older supervisor.py disables long-term memory and warns.
+#
+# boto3 must be new enough to carry the bedrock-data-automation service
+# model that file_ingest.py uses; 1.43.46 is what this was verified on.
+strands-agents[ollama]==1.47.0
+strands-agents-tools==0.8.3
+bedrock-agentcore==1.18.0
+boto3==1.43.46
+requests==2.34.2
+streamlit==1.59.1
+# Spreadsheet parsing (.xlsx/.xls) — local, no AWS call needed.
+pandas==3.0.3
+openpyxl==3.1.5
+pillow==12.3.0
+# Local PDF text extraction (digital PDFs) — free, and the fallback for
+# PDFs that Bedrock Data Automation rejects. Scanned PDFs still use BDA.
+pypdf==6.1.1
+# Web search (DuckDuckGo, no API key) — gives the assistant live internet
+# access for questions outside the Knowledge Base. See web_search.py.
+ddgs==9.6.0
+# PII redaction of extracted text before it is written to S3 / the Knowledge
+# Base (see pii_redaction.py). Local CPU only — Presidio is NOT an AWS call,
+# so it adds zero AWS spend (chosen over AWS Comprehend for exactly that
+# reason). spaCy supplies the NER that catches names, which regex cannot.
+#
+# The spaCy English model is a separate download, not a PyPI dependency:
+#   python -m spacy download en_core_web_lg
+# (en_core_web_sm works as a smaller fallback with slightly worse name recall.)
+presidio-analyzer==2.2.364
+presidio-anonymizer==2.2.364
+spacy==3.8.14

@@ -1,0 +1,10 @@
+# Test-only dependencies. Not needed to run the chatbot.
+#   pip install -r agents/requirements.txt -r requirements-dev.txt
+#
+# Pillow is here rather than in the runtime list because it is used only
+# to generate the smoke-test image fixture, not by the app.
+pytest==8.4.2
+pillow==12.3.0
+# Ships a prebuilt ffmpeg, so the video smoke test runs without asking
+# anyone to install ffmpeg system-wide. The test skips if it is absent.
+imageio-ffmpeg==0.6.0

@@ -1,3 +1,10 @@
-aws-cdk-lib>=2.261.0,<3.0.0
-constructs>=10.5.0,<11.0.0
-cdklabs.generative-ai-cdk-constructs
+# Infrastructure dependencies — needed only to run `cdk deploy` / `cdk destroy`.
+# The chatbot itself runs on agents/requirements.txt.
+#
+# Exact pins, not ranges: CDK minor releases have changed construct
+# defaults mid-stream before, and an infra dependency that drifts between
+# two clones is the kind of thing you discover at deploy time, in an
+# account that is awkward to debug in.
+aws-cdk-lib==2.261.0
+constructs==10.6.0
+cdklabs.generative-ai-cdk-constructs==0.1.318

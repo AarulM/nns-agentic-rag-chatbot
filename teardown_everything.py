@@ -16,11 +16,26 @@ every step checks "does this still exist?" first and skips if it's gone.
 
 Run: python teardown_everything.py
 """
+import os
 import subprocess
+import sys
 import time
+from pathlib import Path
+
 import boto3
 
-REGION = "us-east-1"
+sys.path.insert(0, "agents")
+from aws_config import REGION, PARTITION  # noqa: E402
+
+# Region comes from AWS_REGION / .env, never a literal. Hardcoding
+# "us-east-1" here would be the worst possible bug in this file: run
+# against a GovCloud deployment it would quietly find nothing to delete,
+# report "All done", and leave the ~$1/hr OpenSearch collection running.
+if not REGION:
+    raise SystemExit(
+        "AWS_REGION is not set. Refusing to run a teardown against an "
+        "unknown region — set it in .env first."
+    )
 GATEWAY_NAME = "NnsCompanyToolsGateway"
 WEB_ACL_NAME = "nns-gateway-web-acl"
 MEMORY_TABLE = "NnsChatbotMemory"
@@ -53,7 +68,10 @@ def teardown_waf(gateway_id):
     step("WAF Web ACL")
     if gateway_id:
         account_id = boto3.client("sts", region_name=REGION).get_caller_identity()["Account"]
-        gateway_arn = f"arn:aws:bedrock-agentcore:{REGION}:{account_id}:gateway/{gateway_id}"
+        gateway_arn = (
+            f"arn:{PARTITION}:bedrock-agentcore:{REGION}:{account_id}"
+            f":gateway/{gateway_id}"
+        )
         try:
             acl = wafv2.get_web_acl_for_resource(ResourceArn=gateway_arn).get("WebACL")
         except wafv2.exceptions.ClientError:
@@ -152,11 +170,44 @@ def teardown_cognito():
 
 
 # ---------- 5. CDK stack ----------
-def teardown_cdk():
+def _cdk_python() -> str:
+    """
+    The interpreter `cdk` must run `app.py` with.
+
+    cdk.json declares `"app": "python3 app.py"`, and `cdk destroy` resolves
+    that `python3` from PATH. If the venv is not activated, PATH's `python3`
+    is the *system* interpreter, which does not have aws-cdk-lib installed —
+    so synth fails, `cdk destroy` tears down nothing, and (before this fix)
+    the script still printed "All done". That is exactly the silent failure
+    that left resources running after a teardown.
+
+    Pin it to the project venv explicitly, located relative to this file so
+    it works no matter how teardown is launched. Fall back to whatever
+    interpreter is running this script if there is no venv.
+    """
+    venv_python = Path(__file__).resolve().parent / ".venv" / "bin" / "python3"
+    return str(venv_python) if venv_python.exists() else sys.executable
+
+
+def teardown_cdk() -> bool:
     step("CDK stack (S3 bucket, Knowledge Base, Lambda, IAM role, Guardrail)")
-    result = subprocess.run(["cdk", "destroy", "--force"], check=False)
+    python = _cdk_python()
+    print(f"Synthesizing with: {python}")
+    # `--app` pins the interpreter directly; prepending its bin dir to PATH
+    # also covers anything app.py itself shells out to `python`/`python3`.
+    env = {
+        **os.environ,
+        "PATH": os.pathsep.join([os.path.dirname(python), os.environ.get("PATH", "")]),
+    }
+    result = subprocess.run(
+        ["cdk", "destroy", "--force", "--app", f"{python} app.py"],
+        check=False,
+        env=env,
+    )
     if result.returncode != 0:
         print("WARNING: `cdk destroy` exited non-zero — check the output above.")
+        return False
+    return True
 
 
 def main():
@@ -165,8 +216,20 @@ def main():
     teardown_gateway(gateway_id)
     teardown_memory()
     teardown_cognito()
-    teardown_cdk()
-    print("\nAll done. Everything created for this project — CDK-managed and boto3-managed — has been torn down.")
+    cdk_ok = teardown_cdk()
+    if cdk_ok:
+        print(
+            "\nAll done. Everything created for this project — CDK-managed and "
+            "boto3-managed — has been torn down."
+        )
+    else:
+        print(
+            "\nWARNING: boto3-managed resources were torn down, but `cdk destroy` "
+            "did NOT succeed — the S3 bucket, Knowledge Base, OpenSearch collection "
+            "(~$1/hr!), Lambda, IAM role, and Guardrail may still exist. Re-run this "
+            "script (safe to repeat), and check the CloudFormation console."
+        )
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

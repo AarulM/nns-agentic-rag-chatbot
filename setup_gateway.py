@@ -9,16 +9,25 @@ Lambda target is replaced outright), so re-running is always safe. The
 Lambda/role ARNs are read straight from the CloudFormation stack outputs,
 so nothing needs to be pasted in beforehand.
 
-At the end it prints the values to paste into agents/aws_config.py and
-the client secret for agents/gateway_secrets.py.
+At the end it prints the values to paste into .env and the client secret
+for agents/gateway_secrets.py.
 
 Run: python setup_gateway.py
 """
+import sys
 import time
+
 import boto3
 import requests
 
-REGION = "us-east-1"
+sys.path.insert(0, "agents")
+from aws_config import REGION, IS_GOVCLOUD  # noqa: E402
+
+# GovCloud serves Cognito's hosted UI from <domain>.auth-fips.<region>...
+# rather than plain .auth. — agents/mcp_gateway_client.py already picks the
+# right one at call time, and this script has to agree with it or the token
+# URL it prints will 404 in GovCloud.
+COGNITO_AUTH_HOST = "auth-fips" if IS_GOVCLOUD else "auth"
 STACK_NAME = "NnsAgenticRagChatbotStack"
 
 USER_POOL_NAME = "nns-agentcore-gateway-pool"
@@ -132,7 +141,10 @@ def ensure_domain(user_pool_id):
 
 
 def get_access_token(domain_prefix, client_id, client_secret):
-    token_url = f"https://{domain_prefix}.auth.{REGION}.amazoncognito.com/oauth2/token"
+    token_url = (
+        f"https://{domain_prefix}.{COGNITO_AUTH_HOST}.{REGION}"
+        f".amazoncognito.com/oauth2/token"
+    )
     response = requests.post(
         token_url,
         data={"grant_type": "client_credentials", "scope": SCOPE_STRING},
@@ -257,10 +269,10 @@ def main():
     token = get_access_token(domain_prefix, client_id, client_secret)
     print(f"Got a token (first 20 chars): {token[:20]}...")
 
-    print("\n--- Paste into agents/aws_config.py ---")
-    print(f'GATEWAY_URL = "{gateway_url}"')
-    print(f'COGNITO_DOMAIN = "{domain_prefix}"')
-    print(f'COGNITO_CLIENT_ID = "{client_id}"')
+    print("\n--- Paste into .env ---")
+    print(f"GATEWAY_URL={gateway_url}")
+    print(f"COGNITO_DOMAIN={domain_prefix}")
+    print(f"COGNITO_CLIENT_ID={client_id}")
     print("\n--- Paste into agents/gateway_secrets.py (gitignored) ---")
     print(f'COGNITO_CLIENT_SECRET = "{client_secret}"')
 

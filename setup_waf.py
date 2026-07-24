@@ -14,9 +14,12 @@ your agents, or the Knowledge Base.
 Run: python setup_waf.py
 """
 import time
+import sys
+
 import boto3
 
-REGION = "us-east-1"
+sys.path.insert(0, "agents")
+from aws_config import REGION, PARTITION  # noqa: E402
 GATEWAY_NAME = "NnsCompanyToolsGateway"
 WEB_ACL_NAME = "nns-gateway-web-acl"
 
@@ -33,7 +36,10 @@ def find_gateway_arn():
         page = gateway_client.list_gateways(**kwargs)
         for g in page.get("items", []):
             if g["name"] == GATEWAY_NAME:
-                return g["gatewayId"], f"arn:aws:bedrock-agentcore:{REGION}:{account_id}:gateway/{g['gatewayId']}"
+                return g["gatewayId"], (
+                    f"arn:{PARTITION}:bedrock-agentcore:{REGION}:{account_id}"
+                    f":gateway/{g['gatewayId']}"
+                )
         token = page.get("nextToken")
         if not token:
             raise RuntimeError(f"No Gateway named '{GATEWAY_NAME}' — run setup_gateway.py first.")
